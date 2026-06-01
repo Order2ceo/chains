@@ -172,6 +172,7 @@ class ConfigUpdate(BaseModel):
     slippage_bps: int | None = None
     min_liquidity_sol: float | None = None
     max_token_age_seconds: int | None = None
+    max_top_holder_pct: float | None = None
     auto_buy_enabled: bool | None = None
     auto_sell_enabled: bool | None = None
     max_concurrent_positions: int | None = None

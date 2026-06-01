@@ -122,6 +122,17 @@ export default function Settings({ config, onRefresh }: Props) {
             }
           />
         </div>
+        <div className="setting-row">
+          <label>Max Top Holder (%)</label>
+          <input
+            type="number"
+            step="5"
+            value={merged.max_top_holder_pct}
+            onChange={(e) =>
+              update("max_top_holder_pct", parseFloat(e.target.value))
+            }
+          />
+        </div>
         <div className="setting-row toggle-row">
           <label>Require Locked Liquidity</label>
           <input

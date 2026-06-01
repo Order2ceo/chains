@@ -83,6 +83,52 @@ async def _price_monitor_loop() -> None:
         await asyncio.sleep(3)
 
 
+async def handle_new_token(token: TokenInfo) -> None:
+    """Scanner callback: analyze a newly-detected token and auto-buy if it
+    passes the configured safety filters and auto-buy is enabled.
+
+    The safety gate lives in `trader.evaluate_token` (auto-buy flag, max
+    positions, liquidity, age, security score, and `passes_safety_filters`).
+    A real swap only fires when `trader.is_live` (LIVE + wallet loaded);
+    otherwise the buy is simulated.
+    """
+    try:
+        await ws_manager.broadcast("new_token", token.model_dump(mode="json"))
+    except Exception as e:  # noqa: BLE001
+        logger.error("new_token broadcast error: %s", e)
+
+    if not config.auto_buy_enabled:
+        return
+
+    try:
+        analysis = await analyze_token(token.mint, config)
+    except Exception as e:  # noqa: BLE001
+        logger.error("auto-buy analysis error for %s: %s", token.mint, e)
+        return
+
+    try:
+        bought = await trader.evaluate_token(token, analysis)
+    except Exception as e:  # noqa: BLE001
+        logger.error("auto-buy evaluate error for %s: %s", token.mint, e)
+        return
+
+    if bought:
+        position = trader.positions.get(token.mint)
+        logger.info(
+            "AUTO-BUY executed: %s (live=%s)", token.symbol, trader.is_live
+        )
+        await ws_manager.broadcast(
+            "auto_buy",
+            {
+                "token": token.model_dump(mode="json"),
+                "position": position.model_dump(mode="json")
+                if position
+                else None,
+                "live": trader.is_live,
+            },
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
@@ -90,7 +136,12 @@ async def lifespan(app: FastAPI):
     await init_db(config.db_path)
     demo_tokens = generate_simulated_tokens(15)
     demo_positions = generate_simulated_positions()
-    logger.info("Solana Sniper Bot backend started")
+    scanner.on_new_token(handle_new_token)
+    logger.info(
+        "Solana Sniper Bot backend started (auto_buy=%s, live=%s)",
+        config.auto_buy_enabled,
+        trader.is_live,
+    )
     yield
     if scanner_task and not scanner_task.done():
         scanner_task.cancel()
@@ -313,6 +364,7 @@ async def get_config():
         "slippage_bps": config.slippage_bps,
         "min_liquidity_sol": config.min_liquidity_sol,
         "max_token_age_seconds": config.max_token_age_seconds,
+        "max_top_holder_pct": config.max_top_holder_pct,
         "auto_buy_enabled": config.auto_buy_enabled,
         "auto_sell_enabled": config.auto_sell_enabled,
         "max_concurrent_positions": config.max_concurrent_positions,
@@ -341,6 +393,8 @@ async def update_config(update: ConfigUpdate):
         config.min_liquidity_sol = update.min_liquidity_sol
     if update.max_token_age_seconds is not None:
         config.max_token_age_seconds = update.max_token_age_seconds
+    if update.max_top_holder_pct is not None:
+        config.max_top_holder_pct = update.max_top_holder_pct
     if update.auto_buy_enabled is not None:
         config.auto_buy_enabled = update.auto_buy_enabled
     if update.auto_sell_enabled is not None:

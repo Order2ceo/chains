@@ -12,6 +12,7 @@ import aiohttp
 
 import jupiter
 import market_data
+from analyzer import passes_safety_filters
 from config import BotConfig, WSOL_MINT
 from models import (
     Platform,
@@ -104,14 +105,27 @@ class TradingEngine:
             )
             return False
 
-        # Check security analysis
+        # Check security analysis score
         if analysis.score < 40:
             logger.info(
                 f"Token {token.symbol} failed security check: score {analysis.score}/100"
             )
             return False
 
+        # Apply the user-configured rug-pull / safety filters
+        passed, failures = passes_safety_filters(analysis, self.config)
+        if not passed:
+            logger.info(
+                "Auto-buy skip %s: %s", token.symbol, "; ".join(failures)
+            )
+            return False
+
         # Execute buy
+        logger.info(
+            "Auto-buy: %s passed all filters (score %s) — buying",
+            token.symbol,
+            analysis.score,
+        )
         trade = await self.execute_buy(token)
         return trade is not None
 

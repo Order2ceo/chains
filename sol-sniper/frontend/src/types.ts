@@ -125,6 +125,7 @@ export interface BotConfig {
   slippage_bps: number;
   min_liquidity_sol: number;
   max_token_age_seconds: number;
+  max_top_holder_pct: number;
   auto_buy_enabled: boolean;
   auto_sell_enabled: boolean;
   max_concurrent_positions: number;
