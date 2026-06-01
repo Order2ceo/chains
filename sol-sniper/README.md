@@ -70,6 +70,32 @@ export SOLANA_RPC_URL="https://mainnet.helius-rpc.com/?api-key=..."
 export SOLANA_WALLET_PRIVATE_KEY="<burner-wallet-base58-key>"
 ```
 
+## Running live 24/7 on your own server
+
+The bot only runs while its backend process is running. To snipe "all the time" you must host it yourself (a small VPS, or your own always-on PC) — it cannot run inside a chat session.
+
+1. Copy the project to your server and install (see Quick Start above).
+2. Create a git-ignored `backend/.env` (or export the vars) with your real values:
+   ```bash
+   export SOLANA_RPC_URL="https://mainnet.helius-rpc.com/?api-key=YOUR_KEY"   # a paid/dedicated RPC; the free public RPC gets rate-limited (HTTP 429) under scan load
+   export SOLANA_WALLET_PRIVATE_KEY="<burner-wallet-base58-key>"             # dedicated burner, small funds only
+   export LIVE_MODE=true
+   export AUTO_BUY_ENABLED=true
+   export AUTO_SELL_ENABLED=true
+   export BUY_AMOUNT_SOL=0.02                                                # keep small; this is your max risk per trade
+   ```
+3. Start the backend (e.g. with `nohup`, `tmux`, `systemd`, or `pm2`), then start the scanner from the dashboard (or `POST /api/scanner/start`).
+4. Confirm it is truly live: `GET /api/wallet` should return `"is_live": true` and your real `sol_balance`.
+
+### What to realistically expect
+With safety filters ON, the bot **deliberately skips almost every brand-new token**, because freshly launched meme coins typically have one wallet holding ~100% of supply (the rug/honeypot signature). You will see log lines like:
+```
+Auto-buy skip XLM: Top holder 100.0% > max 30.0%
+```
+This is correct, protective behavior — not a malfunction. It means few (or zero) buys fire until a token actually passes your checks. Loosening the filters (e.g. raising `max_top_holder_pct`, disabling `require_renounced_mint`) makes buys fire more often **but dramatically increases the chance of buying a honeypot/rug and losing the funds**. There is no setting that produces guaranteed profit.
+
+> Use a dedicated paid RPC. The free `api.mainnet-beta.solana.com` returns `429 Too Many Requests` under continuous scanning, which can make balances momentarily read as 0 and miss detections.
+
 ## Architecture
 
 ```
