@@ -11,7 +11,7 @@ import logging
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
-from solana.rpc.types import TxOpts
+from solana.rpc.types import TokenAccountOpts, TxOpts
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.signature import Signature
@@ -70,7 +70,7 @@ class SolanaClient:
         try:
             resp = await self.client.get_token_accounts_by_owner_json_parsed(
                 self.keypair.pubkey(),
-                {"mint": Pubkey.from_string(mint)},  # type: ignore[arg-type]
+                TokenAccountOpts(mint=Pubkey.from_string(mint)),
             )
             total = 0.0
             for acc in resp.value:

@@ -157,18 +157,22 @@ _DECIMALS_CACHE: dict[str, int] = {}
 
 
 async def _get_decimals(mint: str, session: aiohttp.ClientSession) -> int:
-    """Fetch token decimals via Jupiter token API (cached)."""
+    """Fetch token decimals via Jupiter token search API (cached)."""
     if mint in _DECIMALS_CACHE:
         return _DECIMALS_CACHE[mint]
     try:
         async with session.get(
-            f"https://lite-api.jup.ag/tokens/v1/token/{mint}", timeout=10
+            "https://lite-api.jup.ag/tokens/v2/search",
+            params={"query": mint},
+            timeout=10,
         ) as r:
             if r.status == 200:
                 data = await r.json()
-                dec = int(data.get("decimals", 9))
-                _DECIMALS_CACHE[mint] = dec
-                return dec
+                for t in data:
+                    if t.get("id") == mint:
+                        dec = int(t.get("decimals", 9))
+                        _DECIMALS_CACHE[mint] = dec
+                        return dec
     except Exception as e:  # noqa: BLE001
         logger.error("decimals lookup error for %s: %s", mint, e)
     return 9
