@@ -32,6 +32,7 @@ from trader import TradingEngine
 from analyzer import analyze_token, passes_safety_filters
 from ws_manager import ConnectionManager
 from database import init_db
+from solana_client import SolanaClient
 
 load_dotenv()
 
@@ -43,8 +44,9 @@ logger = logging.getLogger(__name__)
 
 # Global state
 config = load_config()
+sol_client = SolanaClient(config.rpc_url, config.wallet_private_key or None)
 scanner = TokenScanner(config)
-trader = TradingEngine(config)
+trader = TradingEngine(config, sol_client)
 ws_manager = ConnectionManager()
 scanner_task: asyncio.Task | None = None
 monitor_task: asyncio.Task | None = None
@@ -52,6 +54,17 @@ monitor_task: asyncio.Task | None = None
 # Simulated data for demo mode
 demo_tokens: list[TokenInfo] = []
 demo_positions: list[dict] = []
+
+
+async def _wallet_balance() -> float:
+    """Real SOL balance when a wallet is loaded, else demo value of 10.0."""
+    if sol_client.has_wallet:
+        try:
+            return round(await sol_client.get_sol_balance(), 4)
+        except Exception as e:  # noqa: BLE001
+            logger.error("wallet balance error: %s", e)
+            return 0.0
+    return 10.0
 
 
 async def _price_monitor_loop() -> None:
@@ -109,6 +122,48 @@ async def health():
     return {"status": "ok", "scanner_active": scanner.running, "version": "1.0.0"}
 
 
+@app.get("/api/wallet")
+async def get_wallet():
+    """Wallet status: connection, address, live SOL balance, and trading mode."""
+    connected = sol_client.has_wallet
+    balance = 0.0
+    if connected:
+        try:
+            balance = await sol_client.get_sol_balance()
+        except Exception as e:  # noqa: BLE001
+            logger.error("wallet balance error: %s", e)
+    return {
+        "connected": connected,
+        "address": sol_client.wallet_address,
+        "sol_balance": balance,
+        "rpc_configured": bool(config.rpc_url),
+        "live_mode": config.live_mode,
+        "is_live": trader.is_live,
+    }
+
+
+@app.post("/api/live-mode")
+async def set_live_mode(payload: dict):
+    """Enable/disable live trading. Requires a loaded wallet to go live."""
+    enable = bool(payload.get("enabled", False))
+    if enable and not sol_client.has_wallet:
+        return {
+            "status": "error",
+            "error": "No wallet configured — set SOLANA_WALLET_PRIVATE_KEY to trade live.",
+            "live_mode": config.live_mode,
+            "is_live": trader.is_live,
+        }
+    config.live_mode = enable
+    await ws_manager.broadcast(
+        "live_mode", {"live_mode": config.live_mode, "is_live": trader.is_live}
+    )
+    return {
+        "status": "ok",
+        "live_mode": config.live_mode,
+        "is_live": trader.is_live,
+    }
+
+
 @app.get("/api/dashboard")
 async def get_dashboard() -> DashboardData:
     """Get complete dashboard data."""
@@ -150,8 +205,8 @@ async def get_dashboard() -> DashboardData:
             min((p.pnl_pct for p in closed_pos), default=0), 1
         ),
         open_positions=len(open_pos),
-        sol_balance=10.0,
-        wallet_address="Demo...Wallet",
+        sol_balance=await _wallet_balance(),
+        wallet_address=sol_client.wallet_address or "Demo...Wallet",
     )
 
     return DashboardData(
@@ -196,12 +251,30 @@ async def get_trades(limit: int = 50) -> list[Trade]:
 @app.post("/api/buy/{mint}")
 async def manual_buy(mint: str):
     """Manually trigger a buy for a token."""
-    # Find token info
+    # Find token info from the current scan/demo feed first.
     token = None
     for t in demo_tokens:
         if t.mint == mint:
             token = t
             break
+
+    # In live mode, look up real on-chain market data for arbitrary mints.
+    if token is None and trader.is_live:
+        import aiohttp
+        import market_data
+
+        async with aiohttp.ClientSession() as s:
+            price_sol, info = await market_data.get_token_price_sol(mint, s)
+        if info:
+            token = TokenInfo(
+                mint=mint,
+                symbol=info["symbol"],
+                name=info["name"],
+                platform=Platform.JUPITER,
+                current_price_sol=price_sol or 0.0000001,
+                current_price_usd=info["price_usd"],
+                initial_liquidity_sol=0.0,
+            )
 
     if not token:
         token = TokenInfo(

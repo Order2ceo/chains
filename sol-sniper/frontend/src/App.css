@@ -70,6 +70,52 @@ body {
   gap: 12px;
 }
 
+.wallet-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.wallet-chip.connected {
+  color: var(--text-primary);
+  border-color: rgba(153, 69, 255, 0.4);
+}
+
+.mode-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+
+.mode-btn.dry {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.mode-btn.live {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(255, 23, 68, 0.6);
+  animation: pulse-glow 2s infinite;
+}
+
+.mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .scanner-status {
   display: flex;
   align-items: center;

@@ -6,12 +6,14 @@ import Settings from "./components/Settings";
 import {
   fetchDashboard,
   fetchConfig,
+  fetchWallet,
+  setLiveMode,
   manualBuy,
   manualSell,
   startScanner,
   stopScanner,
 } from "./api";
-import type { BotConfig, DashboardData } from "./types";
+import type { BotConfig, DashboardData, WalletStatus } from "./types";
 import "./App.css";
 
 type Tab = "dashboard" | "tokens" | "positions" | "settings";
@@ -19,6 +21,7 @@ type Tab = "dashboard" | "tokens" | "positions" | "settings";
 function App() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [config, setConfig] = useState<BotConfig | null>(null);
+  const [wallet, setWallet] = useState<WalletStatus | null>(null);
   const [tab, setTab] = useState<Tab>("dashboard");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +29,14 @@ function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [dashData, cfgData] = await Promise.all([
+      const [dashData, cfgData, walletData] = await Promise.all([
         fetchDashboard(),
         fetchConfig(),
+        fetchWallet(),
       ]);
       setData(dashData);
       setConfig(cfgData);
+      setWallet(walletData);
       setScannerActive(dashData.scanner_active);
       setError(null);
     } catch (err) {
@@ -40,6 +45,26 @@ function App() {
       setLoading(false);
     }
   }, []);
+
+  const toggleLiveMode = async () => {
+    if (!wallet) return;
+    const next = !wallet.is_live;
+    if (next) {
+      const ok = window.confirm(
+        "Enable LIVE trading? Real swaps will be sent on-chain using real SOL from your wallet. You can lose funds. Continue?"
+      );
+      if (!ok) return;
+    }
+    try {
+      const res = await setLiveMode(next);
+      if (res.status === "error") {
+        window.alert(res.error ?? "Failed to toggle live mode");
+      }
+      await loadData();
+    } catch (err) {
+      console.error("Live mode toggle failed:", err);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -89,6 +114,31 @@ function App() {
           <span className="version-badge">v1.0</span>
         </div>
         <div className="header-right">
+          {wallet && (
+            <div className={`wallet-chip ${wallet.connected ? "connected" : ""}`}>
+              <span className={`status-dot ${wallet.connected ? "green" : "red"}`} />
+              {wallet.connected ? (
+                <span title={wallet.address ?? ""}>
+                  {wallet.address?.slice(0, 4)}…{wallet.address?.slice(-4)} ·{" "}
+                  {wallet.sol_balance.toFixed(3)} SOL
+                </span>
+              ) : (
+                <span>No Wallet</span>
+              )}
+            </div>
+          )}
+          <button
+            className={`mode-btn ${wallet?.is_live ? "live" : "dry"}`}
+            onClick={toggleLiveMode}
+            disabled={!wallet?.connected}
+            title={
+              wallet?.connected
+                ? "Toggle live trading"
+                : "Connect a wallet (set SOLANA_WALLET_PRIVATE_KEY) to trade live"
+            }
+          >
+            {wallet?.is_live ? "● LIVE" : "Dry-Run"}
+          </button>
           <div className={`scanner-status ${scannerActive ? "active" : ""}`}>
             <span className={`status-dot ${scannerActive ? "green" : "red"}`} />
             {scannerActive ? "Scanner Active" : "Scanner Idle"}

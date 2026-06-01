@@ -10,6 +10,8 @@ from typing import Any
 
 import aiohttp
 
+import jupiter
+import market_data
 from config import BotConfig, WSOL_MINT
 from models import (
     Platform,
@@ -21,6 +23,7 @@ from models import (
     TradeAction,
     TradeStatus,
 )
+from solana_client import SolanaClient
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +31,29 @@ logger = logging.getLogger(__name__)
 class TradingEngine:
     """Handles auto-buy, auto-sell, take-profit, and stop-loss."""
 
-    def __init__(self, config: BotConfig):
+    def __init__(self, config: BotConfig, sol: SolanaClient | None = None):
         self.config = config
+        self.sol = sol
         self.positions: dict[str, Position] = {}
         self.trade_history: list[Trade] = []
         self._running = False
         self._callbacks: list[Any] = []
         self._price_cache: dict[str, float] = {}
+        self._session: aiohttp.ClientSession | None = None
+        # token mint -> decimals, for sizing real sell orders
+        self._decimals: dict[str, int] = {}
+
+    @property
+    def is_live(self) -> bool:
+        """True only when live trading is enabled AND a wallet is loaded."""
+        return bool(
+            self.config.live_mode and self.sol is not None and self.sol.has_wallet
+        )
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
 
     def on_trade(self, callback: Any) -> None:
         """Register callback for trade events."""
@@ -120,16 +139,34 @@ class TradingEngine:
         )
 
         try:
-            # In production, this would build and send the actual swap transaction
-            # via Raydium/Jupiter/Pump.fun SDK
-            tx_sig = await self._simulate_swap(
-                token.mint, amount_sol, TradeAction.BUY, token.platform
-            )
+            tx_sig: str | None
+            tokens_received = 0.0
+            if self.is_live:
+                session = await self._get_session()
+                result = await jupiter.buy_token(
+                    token.mint,
+                    amount_sol,
+                    self.config.slippage_bps,
+                    self.sol,
+                    session,
+                    self.config.priority_fee_lamports,
+                )
+                if not result.ok:
+                    logger.error("Live BUY failed for %s: %s", token.symbol, result.error)
+                    trade.status = TradeStatus.FAILED
+                    self.trade_history.append(trade)
+                    return None
+                tx_sig = result.tx_signature
+                tokens_received = result.out_amount
+            else:
+                tx_sig = await self._simulate_swap(
+                    token.mint, amount_sol, TradeAction.BUY, token.platform
+                )
 
             if tx_sig:
                 trade.tx_signature = tx_sig
                 trade.status = TradeStatus.CONFIRMED
-                trade.amount_tokens = (
+                trade.amount_tokens = tokens_received or (
                     amount_sol / token.current_price_sol
                     if token.current_price_sol > 0
                     else 0
@@ -203,9 +240,42 @@ class TradingEngine:
         )
 
         try:
-            tx_sig = await self._simulate_swap(
-                mint, position.amount_tokens, TradeAction.SELL, position.platform
-            )
+            tx_sig: str | None
+            if self.is_live:
+                session = await self._get_session()
+                decimals = await jupiter._get_decimals(mint, session)
+                # Sell the actual on-chain balance to avoid dust/rounding leftovers.
+                ui_balance = await self.sol.get_token_balance(mint)
+                amount_to_sell = ui_balance or position.amount_tokens
+                base_units = int(amount_to_sell * (10**decimals))
+                if base_units <= 0:
+                    logger.error("Live SELL: zero token balance for %s", mint)
+                    trade.status = TradeStatus.FAILED
+                    self.trade_history.append(trade)
+                    return None
+                result = await jupiter.sell_token(
+                    mint,
+                    base_units,
+                    self.config.slippage_bps,
+                    self.sol,
+                    session,
+                    self.config.priority_fee_lamports,
+                )
+                if not result.ok:
+                    logger.error(
+                        "Live SELL failed for %s: %s",
+                        position.token_symbol,
+                        result.error,
+                    )
+                    trade.status = TradeStatus.FAILED
+                    self.trade_history.append(trade)
+                    return None
+                tx_sig = result.tx_signature
+                trade.amount_sol = result.out_amount
+            else:
+                tx_sig = await self._simulate_swap(
+                    mint, position.amount_tokens, TradeAction.SELL, position.platform
+                )
 
             if tx_sig:
                 trade.tx_signature = tx_sig
@@ -286,18 +356,36 @@ class TradingEngine:
                     await self.execute_sell(mint, reason="trailing_stop")
 
     async def update_prices(self) -> None:
-        """Update current prices for all open positions (simulated)."""
+        """Update current prices for all open positions.
+
+        Uses real on-chain prices in live mode, otherwise simulates movement.
+        """
         import random
+
+        session = await self._get_session() if self.is_live else None
+        sol_usd = (
+            await market_data.get_sol_price_usd(session) if session else 170.0
+        )
 
         for mint, position in self.positions.items():
             if position.status != PositionStatus.OPEN:
                 continue
 
-            # Simulate price movement
-            change = random.uniform(-0.05, 0.08)
-            new_price = position.current_price_sol * (1 + change)
-            position.current_price_sol = new_price
-            position.current_price_usd = new_price * 170
+            if self.is_live and session is not None:
+                price_sol, info = await market_data.get_token_price_sol(mint, session)
+                if price_sol <= 0:
+                    continue
+                new_price = price_sol
+                position.current_price_sol = new_price
+                position.current_price_usd = (
+                    info["price_usd"] if info else new_price * sol_usd
+                )
+            else:
+                # Simulate price movement
+                change = random.uniform(-0.05, 0.08)
+                new_price = position.current_price_sol * (1 + change)
+                position.current_price_sol = new_price
+                position.current_price_usd = new_price * 170
 
             # Update PnL
             position.current_value_sol = new_price * position.amount_tokens

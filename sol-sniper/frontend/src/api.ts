@@ -1,7 +1,17 @@
 import axios from "axios";
-import type { BotConfig, DashboardData, Position, SecurityAnalysis, TokenInfo, Trade } from "./types";
+import type { BotConfig, DashboardData, Position, SecurityAnalysis, TokenInfo, Trade, WalletStatus, LiveModeResponse } from "./types";
 
 const API = axios.create({ baseURL: "http://localhost:8001" });
+
+export const fetchWallet = async (): Promise<WalletStatus> => {
+  const { data } = await API.get("/api/wallet");
+  return data;
+};
+
+export const setLiveMode = async (enabled: boolean): Promise<LiveModeResponse> => {
+  const { data } = await API.post("/api/live-mode", { enabled });
+  return data;
+};
 
 export const fetchDashboard = async (): Promise<DashboardData> => {
   const { data } = await API.get("/api/dashboard");

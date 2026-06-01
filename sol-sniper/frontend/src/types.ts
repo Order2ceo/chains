@@ -4,6 +4,22 @@ export type TradeAction = "buy" | "sell";
 export type TradeStatus = "pending" | "confirmed" | "failed";
 export type PositionStatus = "open" | "closed" | "stopped_out" | "take_profit";
 
+export interface WalletStatus {
+  connected: boolean;
+  address: string | null;
+  sol_balance: number;
+  rpc_configured: boolean;
+  live_mode: boolean;
+  is_live: boolean;
+}
+
+export interface LiveModeResponse {
+  status: string;
+  error?: string;
+  live_mode: boolean;
+  is_live: boolean;
+}
+
 export interface TokenInfo {
   mint: string;
   name: string;

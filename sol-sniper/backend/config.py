@@ -14,6 +14,12 @@ class BotConfig:
     rpc_url: str = "https://api.mainnet-beta.solana.com"
     ws_url: str = "wss://api.mainnet-beta.solana.com"
 
+    # Live trading
+    # live_mode=False keeps the bot in dry-run: real quotes/prices are used but
+    # NO real swap transactions are sent. Set live_mode=True to trade real funds.
+    live_mode: bool = False
+    wallet_private_key: str = ""
+
     # Trading parameters
     buy_amount_sol: float = 0.1
     max_buy_amount_sol: float = 1.0
@@ -63,6 +69,8 @@ def load_config() -> BotConfig:
     config = BotConfig()
     config.rpc_url = os.getenv("SOLANA_RPC_URL", config.rpc_url)
     config.ws_url = os.getenv("SOLANA_WS_URL", config.ws_url)
+    config.wallet_private_key = os.getenv("SOLANA_WALLET_PRIVATE_KEY", "")
+    config.live_mode = os.getenv("LIVE_MODE", "false").lower() == "true"
     config.buy_amount_sol = float(
         os.getenv("BUY_AMOUNT_SOL", str(config.buy_amount_sol))
     )

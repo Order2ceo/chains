@@ -175,15 +175,39 @@ class TokenScanner:
             await asyncio.sleep(self.config.scan_interval_ms / 1000 * 5)
 
     async def _poll_jupiter_tokens(self) -> None:
-        """Poll Jupiter token list for new entries."""
+        """Poll Jupiter for recently-created tokens (real new-token feed)."""
         if not self._session:
             return
+        import market_data
+
         try:
-            url = "https://token.jup.ag/strict"
-            async with self._session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    tokens = await resp.json()
-                    logger.debug(f"Jupiter: {len(tokens)} tokens in strict list")
+            sol_usd = await market_data.get_sol_price_usd(self._session)
+            recent = await market_data.get_recent_tokens(self._session)
+            for r in recent:
+                mint = r["mint"]
+                if not mint or mint in self.detected_tokens:
+                    continue
+                price_usd = r["price_usd"]
+                price_sol = price_usd / sol_usd if sol_usd else 0.0
+                liquidity_usd = r["liquidity_usd"]
+                liq_sol = liquidity_usd / sol_usd if sol_usd else 0.0
+                token = TokenInfo(
+                    mint=mint,
+                    name=r["name"],
+                    symbol=r["symbol"],
+                    decimals=r["decimals"],
+                    platform=Platform.JUPITER,
+                    initial_liquidity_sol=round(liq_sol, 2),
+                    current_price_sol=price_sol,
+                    current_price_usd=price_usd,
+                    market_cap_usd=r["mcap"],
+                    holder_count=r["holders"],
+                    created_at=datetime.utcnow(),
+                    detected_at=datetime.utcnow(),
+                )
+                self.detected_tokens[mint] = token
+                logger.info(f"[JUPITER] New token: {token.symbol} ({mint[:8]}...)")
+                await self._notify(token)
         except asyncio.TimeoutError:
             logger.debug("Jupiter API timeout")
         except Exception as e:
