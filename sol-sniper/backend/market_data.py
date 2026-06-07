@@ -16,8 +16,55 @@ from config import WSOL_MINT
 logger = logging.getLogger(__name__)
 
 TOKENS_BASE = "https://lite-api.jup.ag/tokens/v2"
+DEXSCREENER_TOKENS = "https://api.dexscreener.com/latest/dex/tokens"
 
 _sol_price_cache: dict[str, float] = {"price": 0.0, "ts": 0.0}
+
+
+async def get_dexscreener_data(
+    mint: str, session: aiohttp.ClientSession
+) -> dict | None:
+    """Fetch real market data from DexScreener for a token (any chain).
+
+    Aggregates across all pairs for the token and returns the deepest-liquidity
+    pair's stats. Returns None if the token is not listed.
+    """
+    try:
+        async with session.get(f"{DEXSCREENER_TOKENS}/{mint}", timeout=10) as r:
+            if r.status != 200:
+                return None
+            data = await r.json()
+    except Exception as e:  # noqa: BLE001
+        logger.error("dexscreener error for %s: %s", mint, e)
+        return None
+
+    pairs = data.get("pairs") or []
+    if not pairs:
+        return None
+
+    # Total liquidity across all pairs; best pair for price/mcap/chain.
+    total_liq = 0.0
+    best = None
+    best_liq = -1.0
+    for p in pairs:
+        liq = float((p.get("liquidity") or {}).get("usd") or 0.0)
+        total_liq += liq
+        if liq > best_liq:
+            best_liq = liq
+            best = p
+    if not best:
+        return None
+
+    return {
+        "mint": mint,
+        "liquidity_usd": total_liq,
+        "price_usd": float(best.get("priceUsd") or 0.0),
+        "market_cap_usd": float(best.get("marketCap") or 0.0),
+        "fdv_usd": float(best.get("fdv") or 0.0),
+        "chain": best.get("chainId", ""),
+        "dex": best.get("dexId", ""),
+        "pair_count": len(pairs),
+    }
 
 
 async def get_sol_price_usd(session: aiohttp.ClientSession) -> float:

@@ -133,6 +133,39 @@ export default function Settings({ config, onRefresh }: Props) {
             }
           />
         </div>
+        <div className="setting-row">
+          <label>Max Top 10 Holders (%)</label>
+          <input
+            type="number"
+            step="1"
+            value={merged.max_top10_holder_pct}
+            onChange={(e) =>
+              update("max_top10_holder_pct", parseFloat(e.target.value))
+            }
+          />
+        </div>
+        <div className="setting-row">
+          <label>Min Liquidity (USD)</label>
+          <input
+            type="number"
+            step="1000"
+            value={merged.min_liquidity_usd}
+            onChange={(e) =>
+              update("min_liquidity_usd", parseFloat(e.target.value))
+            }
+          />
+        </div>
+        <div className="setting-row">
+          <label>Max Total Supply</label>
+          <input
+            type="number"
+            step="1000000"
+            value={merged.max_total_supply}
+            onChange={(e) =>
+              update("max_total_supply", parseFloat(e.target.value))
+            }
+          />
+        </div>
         <div className="setting-row toggle-row">
           <label>Require Locked Liquidity</label>
           <input

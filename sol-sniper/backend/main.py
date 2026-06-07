@@ -369,6 +369,9 @@ async def get_config():
         "min_liquidity_sol": config.min_liquidity_sol,
         "max_token_age_seconds": config.max_token_age_seconds,
         "max_top_holder_pct": config.max_top_holder_pct,
+        "min_liquidity_usd": config.min_liquidity_usd,
+        "max_top10_holder_pct": config.max_top10_holder_pct,
+        "max_total_supply": config.max_total_supply,
         "auto_buy_enabled": config.auto_buy_enabled,
         "auto_sell_enabled": config.auto_sell_enabled,
         "max_concurrent_positions": config.max_concurrent_positions,
@@ -399,6 +402,12 @@ async def update_config(update: ConfigUpdate):
         config.max_token_age_seconds = update.max_token_age_seconds
     if update.max_top_holder_pct is not None:
         config.max_top_holder_pct = update.max_top_holder_pct
+    if update.min_liquidity_usd is not None:
+        config.min_liquidity_usd = update.min_liquidity_usd
+    if update.max_top10_holder_pct is not None:
+        config.max_top10_holder_pct = update.max_top10_holder_pct
+    if update.max_total_supply is not None:
+        config.max_total_supply = update.max_total_supply
     if update.auto_buy_enabled is not None:
         config.auto_buy_enabled = update.auto_buy_enabled
     if update.auto_sell_enabled is not None:

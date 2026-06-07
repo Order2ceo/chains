@@ -8,6 +8,7 @@ from typing import Any
 import aiohttp
 
 from config import BotConfig, TOKEN_PROGRAM
+from market_data import get_dexscreener_data, get_token_market
 from models import RiskLevel, SecurityAnalysis
 
 logger = logging.getLogger(__name__)
@@ -42,14 +43,31 @@ async def analyze_token(
             else:
                 warnings.append("Freeze authority active — tokens can be frozen")
 
-        # 2. Check top holders concentration
+        # 2. Real market data: liquidity (USD) + total supply + chain.
+        # DexScreener is the authoritative multi-chain liquidity source; fall
+        # back to Jupiter for liquidity and use Jupiter for total supply.
+        dex = await get_dexscreener_data(mint, rpc_session)
+        jup = await get_token_market(mint, rpc_session)
+        if dex:
+            analysis.liquidity_usd = dex.get("liquidity_usd", 0.0)
+            analysis.dex_chain = dex.get("chain", "")
+        if jup:
+            if not analysis.liquidity_usd:
+                analysis.liquidity_usd = jup.get("liquidity_usd", 0.0)
+            analysis.total_supply = jup.get("total_supply", 0.0)
+
+        # 3. Check top holders concentration. Measure against the real total
+        # supply when known (accurate); otherwise fall back to the sum of the
+        # largest accounts (conservative — overstates concentration).
         holders = await _get_top_holders(mint, config.rpc_url, rpc_session)
         if holders:
-            total_supply = sum(h["amount"] for h in holders)
-            if total_supply > 0 and holders:
-                analysis.top_holder_pct = (holders[0]["amount"] / total_supply) * 100
+            denom = analysis.total_supply
+            if denom <= 0:
+                denom = sum(h["amount"] for h in holders)
+            if denom > 0:
+                analysis.top_holder_pct = (holders[0]["amount"] / denom) * 100
                 top_10_sum = sum(h["amount"] for h in holders[:10])
-                analysis.top_10_holder_pct = (top_10_sum / total_supply) * 100
+                analysis.top_10_holder_pct = (top_10_sum / denom) * 100
 
                 if analysis.top_holder_pct <= config.max_top_holder_pct:
                     passed.append(
@@ -61,6 +79,15 @@ async def analyze_token(
                     )
 
                 analysis.supply_concentration = analysis.top_10_holder_pct
+
+        if analysis.liquidity_usd >= config.min_liquidity_usd:
+            passed.append(
+                f"Liquidity ${analysis.liquidity_usd:,.0f} (>= ${config.min_liquidity_usd:,.0f})"
+            )
+        elif analysis.liquidity_usd:
+            warnings.append(
+                f"Liquidity ${analysis.liquidity_usd:,.0f} below ${config.min_liquidity_usd:,.0f}"
+            )
 
         # 3. Calculate risk score (0-100)
         score = 0
@@ -77,6 +104,8 @@ async def analyze_token(
         if analysis.liquidity_locked:
             score += 15
         if analysis.lp_burned_pct > 50:
+            score += 10
+        if analysis.liquidity_usd >= config.min_liquidity_usd:
             score += 10
 
         analysis.score = min(score, 100)
@@ -179,6 +208,21 @@ def passes_safety_filters(
     if analysis.top_holder_pct > config.max_top_holder_pct:
         failures.append(
             f"Top holder {analysis.top_holder_pct:.1f}% > max {config.max_top_holder_pct}%"
+        )
+
+    if analysis.top_10_holder_pct > config.max_top10_holder_pct:
+        failures.append(
+            f"Top 10 holders {analysis.top_10_holder_pct:.1f}% > max {config.max_top10_holder_pct}%"
+        )
+
+    if analysis.liquidity_usd < config.min_liquidity_usd:
+        failures.append(
+            f"Liquidity ${analysis.liquidity_usd:,.0f} < min ${config.min_liquidity_usd:,.0f}"
+        )
+
+    if config.max_total_supply > 0 and analysis.total_supply > config.max_total_supply:
+        failures.append(
+            f"Total supply {analysis.total_supply:,.0f} > max {config.max_total_supply:,.0f}"
         )
 
     if analysis.risk_level == RiskLevel.SCAM:

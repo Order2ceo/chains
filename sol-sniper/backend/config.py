@@ -40,6 +40,11 @@ class BotConfig:
     require_renounced_mint: bool = True
     require_no_freeze: bool = True
 
+    # DexScreener-based filters (real USD liquidity + supply + concentration)
+    min_liquidity_usd: float = 80_000.0  # require >= $80K liquidity
+    max_top10_holder_pct: float = 10.0  # top 10 holders must own <= 10%
+    max_total_supply: float = 1_000_000_000.0  # max 1B total supply
+
     # Scanner settings
     scan_interval_ms: int = 1000
     platforms: list[str] = field(
@@ -91,6 +96,15 @@ def load_config() -> BotConfig:
     )
     config.scanner_autostart = (
         os.getenv("SCANNER_AUTOSTART", "false").lower() == "true"
+    )
+    config.min_liquidity_usd = float(
+        os.getenv("MIN_LIQUIDITY_USD", config.min_liquidity_usd)
+    )
+    config.max_top10_holder_pct = float(
+        os.getenv("MAX_TOP10_HOLDER_PCT", config.max_top10_holder_pct)
+    )
+    config.max_total_supply = float(
+        os.getenv("MAX_TOTAL_SUPPLY", config.max_total_supply)
     )
     config.db_path = os.getenv("DB_PATH", config.db_path)
     return config

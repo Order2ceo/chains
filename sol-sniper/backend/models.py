@@ -81,6 +81,11 @@ class SecurityAnalysis(BaseModel):
     supply_concentration: float = 100.0
     lp_burned_pct: float = 0.0
 
+    # Market data (from DexScreener / Jupiter)
+    liquidity_usd: float = 0.0
+    total_supply: float = 0.0
+    dex_chain: str = ""
+
     # Metadata
     has_social_links: bool = False
     has_website: bool = False
@@ -173,6 +178,9 @@ class ConfigUpdate(BaseModel):
     min_liquidity_sol: float | None = None
     max_token_age_seconds: int | None = None
     max_top_holder_pct: float | None = None
+    min_liquidity_usd: float | None = None
+    max_top10_holder_pct: float | None = None
+    max_total_supply: float | None = None
     auto_buy_enabled: bool | None = None
     auto_sell_enabled: bool | None = None
     max_concurrent_positions: int | None = None

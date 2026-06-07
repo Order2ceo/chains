@@ -47,6 +47,9 @@ export interface SecurityAnalysis {
   top_10_holder_pct: number;
   has_honeypot_risk: boolean;
   is_mintable: boolean;
+  liquidity_usd: number;
+  total_supply: number;
+  dex_chain: string;
   warnings: string[];
   passed_checks: string[];
 }
@@ -126,6 +129,9 @@ export interface BotConfig {
   min_liquidity_sol: number;
   max_token_age_seconds: number;
   max_top_holder_pct: number;
+  min_liquidity_usd: number;
+  max_top10_holder_pct: number;
+  max_total_supply: number;
   auto_buy_enabled: boolean;
   auto_sell_enabled: boolean;
   max_concurrent_positions: number;

@@ -6,6 +6,7 @@ Full-stack Solana meme coin sniper bot with auto-trading, rug-pull detection, an
 
 - **Token Scanner**: Real-time detection of new token launches on Pump.fun, Raydium, and Jupiter
 - **Rug-Pull Analyzer**: Security scoring based on mint authority, freeze authority, holder concentration, liquidity locks
+- **DexScreener Filters**: Real multi-chain market data — USD liquidity (≥ $80K), top-10 holder concentration (≤ 10%), and total supply (≤ 1B) checks
 - **Auto-Trading Engine**: Configurable auto-buy on detection, auto-sell with take-profit, stop-loss, and trailing stop
 - **Live on-chain trading**: Real SOL↔token swaps via the Jupiter aggregator, signed by a server-side wallet — gated behind an explicit Dry-Run/LIVE toggle
 - **Dashboard**: Live token feed, active positions with P&L, trade history, wallet status, and bot configuration
@@ -64,6 +65,9 @@ Set environment variables or use the Settings panel in the dashboard:
 | `AUTO_BUY_ENABLED` | false | Enable automatic buying |
 | `AUTO_SELL_ENABLED` | true | Enable TP/SL auto-sell |
 | `SCANNER_AUTOSTART` | false | Start the scanner automatically on boot (for 24/7 hosting) |
+| `MIN_LIQUIDITY_USD` | 80000 | Require >= this much USD liquidity (DexScreener, any chain) |
+| `MAX_TOP10_HOLDER_PCT` | 10 | Top 10 holders must own <= this percent of supply |
+| `MAX_TOTAL_SUPPLY` | 1000000000 | Reject tokens with total supply above this (0 = no limit) |
 
 Never commit your private key. Pass it via the environment (e.g. a local `.env` file that is git-ignored):
 ```bash
