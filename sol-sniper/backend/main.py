@@ -132,7 +132,7 @@ async def handle_new_token(token: TokenInfo) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle."""
-    global demo_tokens, demo_positions
+    global demo_tokens, demo_positions, scanner_task, monitor_task
     await init_db(config.db_path)
     demo_tokens = generate_simulated_tokens(15)
     demo_positions = generate_simulated_positions()
@@ -142,6 +142,10 @@ async def lifespan(app: FastAPI):
         config.auto_buy_enabled,
         trader.is_live,
     )
+    if config.scanner_autostart and not scanner.running:
+        scanner_task = asyncio.create_task(scanner.start())
+        monitor_task = asyncio.create_task(_price_monitor_loop())
+        logger.info("Scanner auto-started (SCANNER_AUTOSTART=true)")
     yield
     if scanner_task and not scanner_task.done():
         scanner_task.cancel()

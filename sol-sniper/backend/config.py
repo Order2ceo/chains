@@ -51,6 +51,9 @@ class BotConfig:
     auto_sell_enabled: bool = True
     max_concurrent_positions: int = 5
 
+    # Start the scanner automatically when the backend boots (for 24/7 hosting).
+    scanner_autostart: bool = False
+
     # Database
     db_path: str = "sniper.db"
 
@@ -85,6 +88,9 @@ def load_config() -> BotConfig:
     )
     config.auto_sell_enabled = (
         os.getenv("AUTO_SELL_ENABLED", "true").lower() == "true"
+    )
+    config.scanner_autostart = (
+        os.getenv("SCANNER_AUTOSTART", "false").lower() == "true"
     )
     config.db_path = os.getenv("DB_PATH", config.db_path)
     return config

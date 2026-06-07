@@ -63,6 +63,7 @@ Set environment variables or use the Settings panel in the dashboard:
 | `STOP_LOSS_PCT` | 30 | Stop loss percentage |
 | `AUTO_BUY_ENABLED` | false | Enable automatic buying |
 | `AUTO_SELL_ENABLED` | true | Enable TP/SL auto-sell |
+| `SCANNER_AUTOSTART` | false | Start the scanner automatically on boot (for 24/7 hosting) |
 
 Never commit your private key. Pass it via the environment (e.g. a local `.env` file that is git-ignored):
 ```bash
@@ -73,6 +74,10 @@ export SOLANA_WALLET_PRIVATE_KEY="<burner-wallet-base58-key>"
 ## Running live 24/7 on your own server
 
 The bot only runs while its backend process is running. To snipe "all the time" you must host it yourself (a small VPS, or your own always-on PC) — it cannot run inside a chat session.
+
+> **Windows users:** see [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) for a step-by-step guide with one-click `start-bot.bat` / `start-dashboard.bat` launchers and auto-start-on-boot instructions.
+
+Set `SCANNER_AUTOSTART=true` so the scanner arms automatically on boot (no manual click). Copy `backend/.env.example` to `backend/.env` and fill in your values.
 
 1. Copy the project to your server and install (see Quick Start above).
 2. Create a git-ignored `backend/.env` (or export the vars) with your real values:
